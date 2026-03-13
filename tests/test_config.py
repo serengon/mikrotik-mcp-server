@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from mikrotik_mcp.config import RouterOSSettings
+from mikrotik_mcp.config import RouterOSSettings, load_router_configs
 
 
 class TestRouterOSSettings:
@@ -57,3 +59,82 @@ class TestRouterOSSettings:
         assert s.url == "https://env.test/rest"
         assert s.user == "envuser"
         assert s.verify_ssl is False
+
+
+class TestLoadRouterConfigs:
+    def test_load_from_json_file(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config_file = tmp_path / "routers.json"
+        config_file.write_text(json.dumps({
+            "routers": {
+                "edge-gw": {"url": "http://172.16.0.1", "user": "admin", "password": ""},
+                "core-sw": {"url": "http://172.16.0.2", "user": "admin", "verify_ssl": False},
+            }
+        }))
+        monkeypatch.setenv("ROUTEROS_CONFIG", str(config_file))
+        monkeypatch.delenv("ROUTEROS_URL", raising=False)
+
+        configs = load_router_configs()
+
+        assert len(configs) == 2
+        assert "edge-gw" in configs
+        assert "core-sw" in configs
+        assert configs["edge-gw"].url == "http://172.16.0.1"
+        assert configs["core-sw"].verify_ssl is False
+
+    def test_load_from_cwd_routers_json(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config_file = tmp_path / "routers.json"
+        config_file.write_text(json.dumps({
+            "routers": {
+                "fw-01": {"url": "http://172.16.0.3", "user": "admin"},
+            }
+        }))
+        monkeypatch.delenv("ROUTEROS_CONFIG", raising=False)
+        monkeypatch.delenv("ROUTEROS_URL", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        configs = load_router_configs()
+
+        assert len(configs) == 1
+        assert "fw-01" in configs
+
+    def test_fallback_to_env_vars(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("ROUTEROS_CONFIG", raising=False)
+        monkeypatch.setenv("ROUTEROS_URL", "http://single.test")
+        monkeypatch.setenv("ROUTEROS_USER", "admin")
+        monkeypatch.setenv("ROUTEROS_PASSWORD", "pass")
+        # Ensure no routers.json in CWD
+        monkeypatch.chdir("/tmp")
+
+        # Clear lru_cache to pick up new env vars
+        from mikrotik_mcp.config import get_settings
+        get_settings.cache_clear()
+
+        configs = load_router_configs()
+
+        assert len(configs) == 1
+        assert "default" in configs
+        assert configs["default"].url == "http://single.test"
+
+    def test_invalid_json_raises(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config_file = tmp_path / "routers.json"
+        config_file.write_text(json.dumps({"routers": {}}))
+        monkeypatch.setenv("ROUTEROS_CONFIG", str(config_file))
+
+        with pytest.raises(ValueError, match="Invalid routers config"):
+            load_router_configs()
+
+    def test_json_defaults(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """User and password default correctly when not specified."""
+        config_file = tmp_path / "routers.json"
+        config_file.write_text(json.dumps({
+            "routers": {
+                "minimal": {"url": "http://172.16.0.1"},
+            }
+        }))
+        monkeypatch.setenv("ROUTEROS_CONFIG", str(config_file))
+
+        configs = load_router_configs()
+
+        assert configs["minimal"].user == "admin"
+        assert configs["minimal"].password.get_secret_value() == ""
+        assert configs["minimal"].verify_ssl is True

@@ -1,4 +1,4 @@
-"""Tests for MCP API tools (search_api and routeros_request)."""
+"""Tests for MCP API tools (search_api, routeros_request, list_routers)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 from mikrotik_mcp.api_index import EndpointInfo
-from mikrotik_mcp.tools.api_tools import routeros_request, search_api
+from mikrotik_mcp.router_registry import RouterInfo, RouterRegistry
+from mikrotik_mcp.tools.api_tools import list_routers, routeros_request, search_api
 from mikrotik_mcp.types import (
     RouterOSError,
     RouterOSPermissionError,
@@ -14,15 +15,70 @@ from mikrotik_mcp.types import (
 )
 
 
+def _make_registry(
+    clients: dict[str, Any] | None = None,
+    single_client: Any = None,
+) -> MagicMock:
+    """Build a mock RouterRegistry."""
+    registry = MagicMock(spec=RouterRegistry)
+
+    if single_client is not None:
+        # Single-router mode
+        registry.is_single_router = True
+        registry.default_client = single_client
+        registry.get_client.return_value = single_client
+        registry.list_routers.return_value = [
+            RouterInfo(name="default", url="http://router.test", version="7.16")
+        ]
+        registry.router_names = ["default"]
+    elif clients:
+        # Multi-router mode
+        registry.is_single_router = False
+        registry.default_client = property(
+            lambda self: (_ for _ in ()).throw(
+                ValueError("Multiple routers configured")
+            )
+        )
+        # Make default_client raise ValueError
+        type(registry).default_client = property(
+            lambda self: (_ for _ in ()).throw(
+                ValueError(
+                    "Multiple routers configured (core-sw, edge-gw). "
+                    "Specify which router to use."
+                )
+            )
+        )
+        registry.get_client.side_effect = lambda name: clients.get(name) or (_ for _ in ()).throw(
+            ValueError(f"Unknown router '{name}'. Available routers: {', '.join(sorted(clients))}")
+        )
+        registry.list_routers.return_value = [
+            RouterInfo(name=name, url=f"http://{name}.test", version="7.16")
+            for name in clients
+        ]
+        registry.router_names = sorted(clients.keys())
+    else:
+        registry.is_single_router = True
+        registry.default_client = AsyncMock()
+        registry.list_routers.return_value = []
+        registry.router_names = []
+
+    return registry
+
+
 def _make_ctx(
     api_index: Any = None,
+    registry: Any = None,
     client: Any = None,
 ) -> MagicMock:
     """Build a mock FastMCP Context with lifespan_context."""
+    # Backward compat: if client passed, wrap in single-router registry
+    if client is not None and registry is None:
+        registry = _make_registry(single_client=client)
+
     ctx = MagicMock()
     ctx.request_context.lifespan_context = {
         "api_index": api_index,
-        "client": client,
+        "registry": registry,
     }
     return ctx
 
@@ -77,7 +133,7 @@ class TestSearchApiTool:
 
 
 # ------------------------------------------------------------------
-# routeros_request
+# routeros_request — single router (backward compatible)
 # ------------------------------------------------------------------
 
 
@@ -196,3 +252,95 @@ class TestRouterosRequestTool:
         result = await routeros_request("GET", "/system/resource", ctx=ctx)
 
         assert "timed out" in result
+
+
+# ------------------------------------------------------------------
+# routeros_request — multi-router
+# ------------------------------------------------------------------
+
+
+class TestRouterosRequestMultiRouter:
+    async def test_with_router_param(self) -> None:
+        client_edge = AsyncMock()
+        client_edge.get.return_value = {"name": "edge-gw"}
+        client_core = AsyncMock()
+        client_core.get.return_value = {"name": "core-sw"}
+
+        registry = _make_registry(clients={"edge-gw": client_edge, "core-sw": client_core})
+        ctx = _make_ctx(registry=registry)
+
+        result = await routeros_request("GET", "/system/identity", router="edge-gw", ctx=ctx)
+
+        assert "edge-gw" in result
+        client_edge.get.assert_called_once_with("/rest/system/identity", params=None)
+        client_core.get.assert_not_called()
+
+    async def test_missing_router_multi_returns_error(self) -> None:
+        client_edge = AsyncMock()
+        client_core = AsyncMock()
+
+        registry = _make_registry(clients={"edge-gw": client_edge, "core-sw": client_core})
+        ctx = _make_ctx(registry=registry)
+
+        result = await routeros_request("GET", "/system/identity", ctx=ctx)
+
+        assert "Error" in result
+        assert "Multiple routers" in result
+
+    async def test_unknown_router_returns_error(self) -> None:
+        client_edge = AsyncMock()
+
+        registry = _make_registry(clients={"edge-gw": client_edge})
+        ctx = _make_ctx(registry=registry)
+
+        result = await routeros_request("GET", "/system/identity", router="bogus", ctx=ctx)
+
+        assert "Error" in result
+        assert "Unknown router" in result
+
+    async def test_single_router_no_param_needed(self) -> None:
+        mock_client = AsyncMock()
+        mock_client.get.return_value = [{"name": "ether1"}]
+        ctx = _make_ctx(client=mock_client)
+
+        result = await routeros_request("GET", "/interface", ctx=ctx)
+
+        assert "ether1" in result
+
+
+# ------------------------------------------------------------------
+# list_routers
+# ------------------------------------------------------------------
+
+
+class TestListRoutersTool:
+    async def test_lists_all_routers(self) -> None:
+        registry = _make_registry(
+            clients={"edge-gw": AsyncMock(), "core-sw": AsyncMock()}
+        )
+        ctx = _make_ctx(registry=registry)
+
+        result = await list_routers(ctx=ctx)
+
+        assert "2 router(s)" in result
+        assert "edge-gw" in result
+        assert "core-sw" in result
+
+    async def test_empty_registry(self) -> None:
+        registry = MagicMock(spec=RouterRegistry)
+        registry.list_routers.return_value = []
+        ctx = _make_ctx(registry=registry)
+
+        result = await list_routers(ctx=ctx)
+
+        assert "No routers configured" in result
+
+    async def test_single_router(self) -> None:
+        mock_client = AsyncMock()
+        registry = _make_registry(single_client=mock_client)
+        ctx = _make_ctx(registry=registry)
+
+        result = await list_routers(ctx=ctx)
+
+        assert "1 router(s)" in result
+        assert "default" in result
