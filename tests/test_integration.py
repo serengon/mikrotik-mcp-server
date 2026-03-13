@@ -11,9 +11,9 @@ from mikrotik_mcp.types import SystemResource
 
 @pytest.fixture
 def integration_settings() -> RouterOSSettings:
-    """Settings for Docker CHR at localhost:8443."""
+    """Settings for Docker CHR at localhost:8080."""
     return RouterOSSettings(
-        url="https://localhost:8443/rest",
+        url="http://localhost:8080",
         user="admin",
         password="",  # type: ignore[arg-type]
         verify_ssl=False,
