@@ -87,7 +87,8 @@ async def routeros_request(
     """
     method = method.upper()
     if method not in _VALID_METHODS:
-        return f"Error: Invalid method '{method}'. Must be one of: {', '.join(sorted(_VALID_METHODS))}"
+        valid = ", ".join(sorted(_VALID_METHODS))
+        return f"Error: Invalid method '{method}'. Must be one of: {valid}"
 
     # Normalize path: ensure /rest/ prefix.
     if not path.startswith("/rest"):
@@ -98,9 +99,7 @@ async def routeros_request(
     try:
         if method == "GET":
             result = await client.get(path, params=params)
-        elif method == "POST":
-            result = await client.post(path, data=body)
-        elif method == "PUT":
+        elif method in ("POST", "PUT"):
             result = await client.post(path, data=body)
         elif method == "PATCH":
             result = await client.patch(path, data=body)

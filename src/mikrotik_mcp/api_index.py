@@ -11,7 +11,9 @@ from typing import Any
 logger = logging.getLogger("mikrotik_mcp.api_index")
 
 # Resolve default spec relative to this package.
-DEFAULT_OAS_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "routeros-7.16-oas2.json"
+DEFAULT_OAS_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "data" / "routeros-7.16-oas2.json"
+)
 
 # Scripting/CLI commands that are not real REST resources.
 SCRIPTING_COMMANDS: frozenset[str] = frozenset({
@@ -105,7 +107,7 @@ class ApiIndex:
             # Check if parent resource exists or could exist.
             if len(segments) > 2:
                 parent_path = "/" + "/".join(segments[:-1])
-                # If parent is a real resource (has CRUD operations or is in paths), this is an action.
+                # If parent has CRUD operations, this is a domain action.
                 parent_has_crud = any(
                     f"{parent_path}/{suffix}" in paths for suffix in CRUD_SUFFIXES
                 )
