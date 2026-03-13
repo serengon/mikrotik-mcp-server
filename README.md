@@ -6,144 +6,138 @@ Claude discovers endpoints via a built-in search index (689 consolidated resourc
 
 > **Status:** Beta — read operations work well; write support is coming.
 
-## Prerequisites
+## Quick start (for testers)
 
-- **Python 3.11+**
-- **Docker** (with KVM support) — for the test router
-- **Claude Code** — [installation guide](https://docs.anthropic.com/en/docs/claude-code/getting-started)
+You need [Claude Code](https://docs.anthropic.com/en/docs/claude-code/getting-started) and a RouterOS v7 device (physical or Docker).
 
-Verify KVM is available (required by the RouterOS Docker image):
+### 1. Install `uv` (Python package runner)
 
 ```bash
-ls /dev/kvm
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-## Quick start
-
-### 1. Clone and install
+### 2. Add the MCP server to Claude Code
 
 ```bash
-git clone https://github.com/serengon/mikrotik-mcp-server.git
-cd mikrotik-mcp-server
-python3 -m venv .venv
-.venv/bin/pip install -e .
+claude mcp add mikrotik \
+  -e ROUTEROS_URL=http://localhost:8080 \
+  -e ROUTEROS_USER=admin \
+  -e ROUTEROS_PASSWORD= \
+  -e ROUTEROS_VERIFY_SSL=false \
+  -- uvx --from "git+https://github.com/serengon/mikrotik-mcp-server.git" mikrotik-mcp
 ```
 
-This creates the `mikrotik-mcp` CLI entry point at `.venv/bin/mikrotik-mcp`.
+Adjust the `-e` values if your router has a different IP, user, or password.
 
-### 2. Start the test router
+### 3. Start a test router (optional)
 
-The project includes a Docker Compose file that runs a RouterOS CHR instance:
+If you don't have a physical MikroTik, run one in Docker (requires KVM — check with `ls /dev/kvm`):
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+docker run -d --name routeros --cap-add NET_ADMIN \
+  --device /dev/net/tun --device /dev/kvm \
+  -p 8080:80 -p 8443:443 -p 2222:22 \
+  evilfreelancer/docker-routeros:7.16
 ```
 
-Wait ~30 seconds for RouterOS to boot, then verify it's responding:
+Wait ~30 seconds for it to boot, then verify:
 
 ```bash
 curl -s -u admin: http://localhost:8080/rest/system/resource | head -c 200
 ```
 
-You should see JSON with fields like `board-name`, `version`, `uptime`, etc.
-
-> **Ports:** 8080 (HTTP REST API), 8443 (HTTPS), 2222 (SSH), 5900 (VNC).
 > Default credentials: `admin` with no password.
 
-### 3. Configure environment variables
-
-```bash
-cp .env.example .env
-```
-
-The defaults work out of the box with the Docker CHR:
-
-| Variable | Default | Description |
-|---|---|---|
-| `ROUTEROS_URL` | `http://localhost:8080` | Router REST API base URL |
-| `ROUTEROS_USER` | `admin` | Username |
-| `ROUTEROS_PASSWORD` | *(empty)* | Password |
-| `ROUTEROS_VERIFY_SSL` | `false` | Set to `true` + provide `ROUTEROS_CA_CERT` for production |
-| `ROUTEROS_CA_CERT` | *(none)* | Path to CA certificate file for custom HTTPS |
-
-### 4. Set your env vars in the shell
-
-The `.mcp.json` references env vars with `${VAR}` syntax. Make sure they're exported in whatever shell Claude Code runs from:
-
-```bash
-# Option A: export directly
-export ROUTEROS_URL=http://localhost:8080
-export ROUTEROS_USER=admin
-export ROUTEROS_PASSWORD=""
-export ROUTEROS_VERIFY_SSL=false
-
-# Option B: source .env (if your shell supports it)
-set -a && source .env && set +a
-```
-
-### 5. Launch Claude Code
-
-From the project root:
+### 4. Try it
 
 ```bash
 claude
 ```
 
-Claude Code reads `.mcp.json` automatically and starts the MikroTik MCP server. Verify with:
-
-```
-/mcp
-```
-
-You should see `mikrotik` listed as a connected server with 2 tools and 1 resource.
-
-### 6. Try it out
-
-Ask Claude things like:
+Type `/mcp` — you should see `mikrotik` connected with 2 tools. Then ask:
 
 - *"What interfaces does the router have?"*
-- *"Show me the IP addresses configured"*
+- *"Show me the IP addresses"*
+- *"What's the router's uptime?"*
 - *"Search for DHCP-related endpoints"*
-- *"What's the router's uptime and version?"*
 - *"List firewall filter rules"*
 
-Behind the scenes, Claude uses two tools:
+That's it. No clone, no venv, no config files.
+
+---
+
+## How it works
+
+Claude uses two tools to interact with the router:
 
 | Tool | Purpose |
 |---|---|
 | `search_api` | Search the RouterOS API index by keyword to discover endpoints |
 | `routeros_request` | Execute a REST call (GET/POST/PUT/PATCH/DELETE) against the router |
 
-## Running tests
+Plus one resource (`router://api-groups`) that provides an overview of all API groups.
+
+## Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `ROUTEROS_URL` | *(required)* | Router REST API base URL |
+| `ROUTEROS_USER` | *(required)* | Username |
+| `ROUTEROS_PASSWORD` | *(empty)* | Password |
+| `ROUTEROS_VERIFY_SSL` | `true` | Set to `false` for HTTP or self-signed certs |
+| `ROUTEROS_CA_CERT` | *(none)* | Path to CA certificate file for custom HTTPS |
+
+## Connecting to a real router
+
+1. Enable the REST API on the router: `/ip/service set www-ssl disabled=no` (or `www` for HTTP)
+2. Use the router's IP and credentials in the `claude mcp add` command
+3. For HTTPS with a custom CA, set `ROUTEROS_VERIFY_SSL=true` and `ROUTEROS_CA_CERT=/path/to/ca.pem`
+
+> The REST API requires RouterOS v7.1+.
+
+## Development setup
+
+For contributors who want to modify the code or run tests:
+
+```bash
+git clone https://github.com/serengon/mikrotik-mcp-server.git
+cd mikrotik-mcp-server
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+```
+
+The project includes a `.mcp.json` that points to the local venv, so Claude Code picks it up automatically when working from the repo. Export the env vars first:
+
+```bash
+cp .env.example .env
+# edit .env with your values, then:
+set -a && source .env && set +a
+claude
+```
+
+### Running tests
 
 ```bash
 # Unit tests (no router needed)
 .venv/bin/pytest -x -v --ignore=tests/test_integration.py
 
 # Integration tests (requires Docker CHR running)
+docker compose -f docker/docker-compose.yml up -d
 .venv/bin/pytest -x -v -m integration
+
+# Lint
+.venv/bin/ruff check src/ tests/
 ```
-
-## Connecting to a real router
-
-To use this with a physical MikroTik device instead of Docker CHR:
-
-1. Enable the REST API on the router: `ip/service set www-ssl disabled=no` (or `www` for HTTP)
-2. Update your env vars to point to the router's IP and credentials
-3. For HTTPS with a custom certificate, set `ROUTEROS_VERIFY_SSL=true` and `ROUTEROS_CA_CERT=/path/to/ca.pem`
-
-> **Note:** The REST API is available on RouterOS v7.1+ only.
 
 ## Troubleshooting
 
-**"Connection refused" when starting Claude Code**
-- Check that Docker CHR is running: `docker compose -f docker/docker-compose.yml ps`
-- Verify the REST API responds: `curl -u admin: http://localhost:8080/rest/system/resource`
+**MCP server not connecting**
+- Check that the router is reachable: `curl -u admin: http://localhost:8080/rest/system/resource`
+- For Docker: wait 30s after start, check with `docker logs routeros`
 
 **MCP server not showing in `/mcp`**
-- Make sure you're in the project root directory (where `.mcp.json` lives)
-- Check that env vars are exported in your shell
-- Verify the entry point exists: `ls .venv/bin/mikrotik-mcp`
+- Verify it was added: `claude mcp list`
+- Re-add if needed with the `claude mcp add` command above
 
 **"RouterOS error 401"**
 - Wrong credentials — check `ROUTEROS_USER` and `ROUTEROS_PASSWORD`
