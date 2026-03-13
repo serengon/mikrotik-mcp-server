@@ -42,7 +42,7 @@ docs/
 - Linting: ruff
 - Tests: pytest + pytest-asyncio
 - Commits: conventional commits (feat:, fix:, docs:, etc.)
-- Env vars para config: ROUTEROS_URL, ROUTEROS_USER, ROUTEROS_PASS, ROUTEROS_CA_CERT, ROUTEROS_VERIFY_SSL
+- Env vars para config: ROUTEROS_URL, ROUTEROS_USER, ROUTEROS_PASSWORD, ROUTEROS_CA_CERT, ROUTEROS_VERIFY_SSL
 
 ## Quirks de la REST API a recordar
 

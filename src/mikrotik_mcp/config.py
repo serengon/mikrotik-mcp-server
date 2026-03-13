@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class RouterOSSettings(BaseSettings):
     """Settings loaded from environment variables.
 
-    Env vars: ROUTEROS_URL, ROUTEROS_USER, ROUTEROS_PASS,
+    Env vars: ROUTEROS_URL, ROUTEROS_USER, ROUTEROS_PASSWORD,
     ROUTEROS_CA_CERT, ROUTEROS_VERIFY_SSL.
     """
 
