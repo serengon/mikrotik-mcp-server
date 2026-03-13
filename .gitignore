@@ -37,3 +37,6 @@ Thumbs.db
 
 # MCP
 .mcp/
+
+# Multi-router config (contains credentials)
+routers.json

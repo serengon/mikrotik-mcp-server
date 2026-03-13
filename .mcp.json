@@ -7,7 +7,8 @@
         "ROUTEROS_URL": "${ROUTEROS_URL}",
         "ROUTEROS_USER": "${ROUTEROS_USER}",
         "ROUTEROS_PASSWORD": "${ROUTEROS_PASSWORD}",
-        "ROUTEROS_VERIFY_SSL": "${ROUTEROS_VERIFY_SSL:-false}"
+        "ROUTEROS_VERIFY_SSL": "${ROUTEROS_VERIFY_SSL:-false}",
+        "ROUTEROS_CONFIG": "${ROUTEROS_CONFIG:-}"
       }
     }
   }

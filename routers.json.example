@@ -1,0 +1,8 @@
+{
+  "routers": {
+    "edge-gw":   {"url": "http://172.16.0.1", "user": "admin", "password": "", "verify_ssl": false},
+    "core-sw":   {"url": "http://172.16.0.2", "user": "admin", "password": "", "verify_ssl": false},
+    "fw-01":     {"url": "http://172.16.0.3", "user": "admin", "password": "", "verify_ssl": false},
+    "wifi-ctrl": {"url": "http://172.16.0.4", "user": "admin", "password": "", "verify_ssl": false}
+  }
+}
