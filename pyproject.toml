@@ -26,6 +26,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/mikrotik_mcp"]
 
+[project.scripts]
+mikrotik-mcp = "mikrotik_mcp.server:mcp.run"
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100
