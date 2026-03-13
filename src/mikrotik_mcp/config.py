@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import json
+import logging
+import os
 import ssl
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger("mikrotik_mcp.config")
 
 
 class RouterOSSettings(BaseSettings):
@@ -44,3 +50,50 @@ class RouterOSSettings(BaseSettings):
 def get_settings() -> RouterOSSettings:
     """Return cached singleton settings instance."""
     return RouterOSSettings()  # type: ignore[call-arg]
+
+
+def load_router_configs() -> dict[str, RouterOSSettings]:
+    """Load router configurations from JSON file or env vars.
+
+    Resolution order:
+    1. ROUTEROS_CONFIG env var → path to JSON file
+    2. routers.json in CWD
+    3. Fallback to single-router env vars with key "default"
+    """
+    # Try ROUTEROS_CONFIG env var
+    config_path = os.environ.get("ROUTEROS_CONFIG")
+    if config_path:
+        return _load_from_json(Path(config_path))
+
+    # Try routers.json in CWD
+    cwd_config = Path("routers.json")
+    if cwd_config.exists():
+        return _load_from_json(cwd_config)
+
+    # Fallback to single router from env vars
+    logger.debug("No multi-router config found, using single-router env vars")
+    return {"default": get_settings()}
+
+
+def _load_from_json(path: Path) -> dict[str, RouterOSSettings]:
+    """Parse a routers JSON file into a dict of settings."""
+    logger.info("Loading router configs from %s", path)
+    with open(path) as f:
+        data = json.load(f)
+
+    routers_data = data.get("routers", data)
+    if not isinstance(routers_data, dict) or not routers_data:
+        raise ValueError(f"Invalid routers config in {path}: expected non-empty 'routers' dict")
+
+    configs: dict[str, RouterOSSettings] = {}
+    for name, router_cfg in routers_data.items():
+        configs[name] = RouterOSSettings(
+            url=router_cfg["url"],
+            user=router_cfg.get("user", "admin"),
+            password=router_cfg.get("password", ""),  # type: ignore[arg-type]
+            ca_cert=router_cfg.get("ca_cert"),
+            verify_ssl=router_cfg.get("verify_ssl", True),
+        )
+
+    logger.info("Loaded %d router configs: %s", len(configs), ", ".join(sorted(configs)))
+    return configs
