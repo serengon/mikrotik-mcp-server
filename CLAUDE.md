@@ -28,8 +28,8 @@ src/mikrotik_mcp/
   tools/
     api_tools.py     # search_api + routeros_request (2 tools RAG)
     writing.py       # Tools de escritura (Fase futura)
-data/
-  routeros-7.16-oas2.json  # OpenAPI 2.0 spec (4607 paths, 6.4MB)
+  data/
+    routeros-7.16-oas2.json  # OpenAPI 2.0 spec (4607 paths, 6.4MB)
 tests/
 docker/              # Docker CHR para testing (Linux)
 docs/

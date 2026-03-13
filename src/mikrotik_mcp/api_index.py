@@ -11,9 +11,7 @@ from typing import Any
 logger = logging.getLogger("mikrotik_mcp.api_index")
 
 # Resolve default spec relative to this package.
-DEFAULT_OAS_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "data" / "routeros-7.16-oas2.json"
-)
+DEFAULT_OAS_PATH = Path(__file__).resolve().parent / "data" / "routeros-7.16-oas2.json"
 
 # Scripting/CLI commands that are not real REST resources.
 SCRIPTING_COMMANDS: frozenset[str] = frozenset({
