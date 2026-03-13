@@ -8,6 +8,7 @@ from typing import Any
 from fastmcp import Context
 
 from mikrotik_mcp.api_index import ApiIndex, EndpointInfo
+from mikrotik_mcp.router_registry import RouterRegistry
 from mikrotik_mcp.types import (
     RouterOSError,
     RouterOSPermissionError,
@@ -67,14 +68,20 @@ def _format_results(results: list[EndpointInfo]) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _get_registry(ctx: Context) -> RouterRegistry:
+    """Extract the RouterRegistry from the lifespan context."""
+    return ctx.request_context.lifespan_context["registry"]
+
+
 async def routeros_request(
     method: str,
     path: str,
     params: dict[str, Any] | None = None,
     body: dict[str, Any] | None = None,
+    router: str | None = None,
     ctx: Context = None,  # type: ignore[assignment]
 ) -> str:
-    """Execute a REST API call against the RouterOS device.
+    """Execute a REST API call against a RouterOS device.
 
     Use search_api first to find the correct endpoint, then call this
     to execute the request.
@@ -84,6 +91,8 @@ async def routeros_request(
         path: API path (e.g. "/ip/address" or "/rest/ip/address")
         params: Query parameters for GET requests
         body: JSON body for POST/PUT/PATCH requests
+        router: Target router name (required when multiple routers are configured).
+                Use list_routers to see available names.
     """
     method = method.upper()
     if method not in _VALID_METHODS:
@@ -94,7 +103,13 @@ async def routeros_request(
     if not path.startswith("/rest"):
         path = "/rest" + (path if path.startswith("/") else f"/{path}")
 
-    client = ctx.request_context.lifespan_context["client"]
+    registry = _get_registry(ctx)
+
+    # Resolve the target client.
+    try:
+        client = registry.get_client(router) if router else registry.default_client
+    except ValueError as exc:
+        return f"Error: {exc}"
 
     try:
         if method == "GET":
@@ -120,3 +135,25 @@ async def routeros_request(
         return "OK (empty response)"
 
     return json.dumps(result, indent=2, default=str)
+
+
+async def list_routers(ctx: Context = None) -> str:  # type: ignore[assignment]
+    """List all configured RouterOS devices.
+
+    Returns the name, URL, RouterOS version, and board name for each
+    router in the registry. Use the router names with routeros_request
+    to target a specific device.
+    """
+    registry = _get_registry(ctx)
+    routers = registry.list_routers()
+
+    if not routers:
+        return "No routers configured."
+
+    lines: list[str] = [f"{len(routers)} router(s) configured:\n"]
+    for info in routers:
+        version = info.version or "unknown"
+        board = info.board_name or "unknown"
+        lines.append(f"  {info.name}: {info.url} (RouterOS {version}, {board})")
+
+    return "\n".join(lines)

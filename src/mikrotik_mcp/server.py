@@ -10,28 +10,29 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from mikrotik_mcp.api_index import ApiIndex
-from mikrotik_mcp.client import RouterOSClient
-from mikrotik_mcp.config import get_settings
-from mikrotik_mcp.tools.api_tools import routeros_request, search_api
+from mikrotik_mcp.config import load_router_configs
+from mikrotik_mcp.router_registry import RouterRegistry
+from mikrotik_mcp.tools.api_tools import list_routers, routeros_request, search_api
 
 logger = logging.getLogger("mikrotik_mcp.server")
 
 
 @asynccontextmanager
 async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
-    """Build API index and connect to the RouterOS device."""
+    """Build API index and connect to all configured RouterOS devices."""
     api_index = ApiIndex()
     logger.info("Loaded API index: %d resources from OAS2 spec", api_index.endpoint_count)
 
-    settings = get_settings()
-    async with RouterOSClient(settings) as client:
-        info = await client.health_check()
-        logger.info(
-            "Connected to %s running RouterOS %s",
-            info.board_name,
-            info.version,
-        )
-        yield {"client": client, "api_index": api_index}
+    configs = load_router_configs()
+    async with RouterRegistry(configs) as registry:
+        for info in registry.list_routers():
+            logger.info(
+                "Router '%s': %s (RouterOS %s)",
+                info.name,
+                info.board_name or "unknown",
+                info.version or "unknown",
+            )
+        yield {"registry": registry, "api_index": api_index}
 
 
 mcp = FastMCP(
@@ -42,6 +43,7 @@ mcp = FastMCP(
 # -- Tools -----------------------------------------------------------------
 mcp.tool(search_api)
 mcp.tool(routeros_request)
+mcp.tool(list_routers)
 
 
 # -- Resources -------------------------------------------------------------
