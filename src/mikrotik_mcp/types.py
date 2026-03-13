@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Error hierarchy
 # ---------------------------------------------------------------------------
@@ -55,13 +54,13 @@ class SystemResource(BaseModel):
 
     uptime: str = Field(alias="uptime")
     version: str = Field(alias="version")
-    cpu_count: str = Field(alias="cpu-count")
-    cpu_load: str = Field(alias="cpu-load")
-    cpu_frequency: str = Field(alias="cpu-frequency")
-    free_memory: str = Field(alias="free-memory")
-    total_memory: str = Field(alias="total-memory")
-    free_hdd_space: str = Field(alias="free-hdd-space")
-    total_hdd_space: str = Field(alias="total-hdd-space")
+    cpu_count: int = Field(alias="cpu-count")
+    cpu_load: int = Field(alias="cpu-load")
+    cpu_frequency: int = Field(alias="cpu-frequency")
+    free_memory: int = Field(alias="free-memory")
+    total_memory: int = Field(alias="total-memory")
+    free_hdd_space: int = Field(alias="free-hdd-space")
+    total_hdd_space: int = Field(alias="total-hdd-space")
     architecture_name: str = Field(alias="architecture-name")
     board_name: str = Field(alias="board-name")
     platform: str = Field(alias="platform")

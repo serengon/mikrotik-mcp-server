@@ -1,0 +1,14 @@
+services:
+  routeros:
+    image: evilfreelancer/docker-routeros:7.16
+    restart: unless-stopped
+    ports:
+      - "8443:443"
+      - "8080:80"
+      - "2222:22"
+      - "5900:5900"
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+      - /dev/kvm
