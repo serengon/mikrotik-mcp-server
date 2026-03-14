@@ -113,6 +113,10 @@ class RouterOSClient:
         """POST — never retried."""
         return await self._request("POST", path, data=data)
 
+    async def put(self, path: str, data: dict[str, Any] | None = None) -> Any:
+        """PUT — never retried. Used to create resources in RouterOS REST API."""
+        return await self._request("PUT", path, data=data)
+
     async def patch(self, path: str, data: dict[str, Any] | None = None) -> Any:
         """PATCH — never retried."""
         return await self._request("PATCH", path, data=data)

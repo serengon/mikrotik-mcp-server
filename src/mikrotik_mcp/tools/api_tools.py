@@ -76,8 +76,8 @@ def _get_registry(ctx: Context) -> RouterRegistry:
 async def routeros_request(
     method: str,
     path: str,
-    params: dict[str, Any] | None = None,
-    body: dict[str, Any] | None = None,
+    params: Any = None,
+    body: Any = None,
     router: str | None = None,
     ctx: Context = None,  # type: ignore[assignment]
 ) -> str:
@@ -94,6 +94,18 @@ async def routeros_request(
         router: Target router name (required when multiple routers are configured).
                 Use list_routers to see available names.
     """
+    # Some MCP clients serialize dicts as JSON strings — parse them back.
+    if isinstance(body, str):
+        try:
+            body = json.loads(body)
+        except json.JSONDecodeError as exc:
+            return f"Error: body is not valid JSON: {exc}"
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except json.JSONDecodeError as exc:
+            return f"Error: params is not valid JSON: {exc}"
+
     method = method.upper()
     if method not in _VALID_METHODS:
         valid = ", ".join(sorted(_VALID_METHODS))
@@ -114,8 +126,10 @@ async def routeros_request(
     try:
         if method == "GET":
             result = await client.get(path, params=params)
-        elif method in ("POST", "PUT"):
+        elif method == "POST":
             result = await client.post(path, data=body)
+        elif method == "PUT":
+            result = await client.put(path, data=body)
         elif method == "PATCH":
             result = await client.patch(path, data=body)
         elif method == "DELETE":
