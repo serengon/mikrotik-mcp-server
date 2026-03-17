@@ -4,17 +4,35 @@ MCP server that lets [Claude Code](https://docs.anthropic.com/en/docs/claude-cod
 
 Claude discovers endpoints via a built-in search index (689 consolidated resources from the RouterOS 7.16 OpenAPI spec) and executes requests against your routers — all through natural language.
 
-## Quick start (single router)
+## Quick start
+
+### One-line installer
+
+The interactive installer checks prerequisites, tests connectivity to your router, and registers the MCP server in Claude Code:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/serengon/mikrotik-mcp-server/main/install.sh | bash
+```
+
+Or if you have the repo cloned:
+
+```bash
+bash install.sh
+```
+
+It supports both single-router and multi-router setups. Just follow the prompts.
+
+### Manual setup (single router)
 
 You need [Claude Code](https://docs.anthropic.com/en/docs/claude-code/getting-started) and a RouterOS v7 device (physical or Docker).
 
-### 1. Install `uv` (Python package runner)
+#### 1. Install `uv` (Python package runner)
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 2. Add the MCP server to Claude Code
+#### 2. Add the MCP server to Claude Code
 
 ```bash
 claude mcp add mikrotik \
@@ -25,7 +43,7 @@ claude mcp add mikrotik \
   -- uvx --from "git+https://github.com/serengon/mikrotik-mcp-server.git" mikrotik-mcp
 ```
 
-### 3. Start a test router (optional)
+#### 3. Start a test router (optional)
 
 If you don't have a physical MikroTik, run one in Docker (requires KVM — check with `ls /dev/kvm`):
 
@@ -44,7 +62,7 @@ curl -s -u admin: http://localhost:8080/rest/system/resource | head -c 200
 
 > Default credentials: `admin` with no password. Use `ROUTEROS_URL=http://localhost:8080`.
 
-### 4. Try it
+#### 4. Try it
 
 ```bash
 claude

@@ -55,3 +55,5 @@ docs/
 - Errores de permisos devuelven HTTP 500, no 403
 - Timeout fijo de 60 segundos
 - Crashes bajo carga paralela en hardware de gama baja
+- Para agregar entradas usar PUT (no POST) — POST devuelve "no such command"
+- Reglas DST-NAT sin `in-interface` causan routing asimétrico desde la LAN: el tráfico entra por WAN, la respuesta vuelve directo por LAN y el cliente descarta el paquete. Siempre especificar `in-interface: ether1` (o la interfaz WAN correspondiente) en reglas de port-forwarding
