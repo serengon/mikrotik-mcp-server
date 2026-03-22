@@ -41,9 +41,9 @@ _CB_HALF_OPEN = "half-open"
 
 _MAX_RETRIES = 2
 _RETRY_BACKOFFS = (1.0, 3.0)
-_CB_FAILURE_THRESHOLD = 3
-_CB_COOLDOWN = 30.0
-_RATE_LIMIT_GAP = 0.1  # 100ms between requests
+_CB_FAILURE_THRESHOLD = 5
+_CB_COOLDOWN = 15.0
+_RATE_LIMIT_GAP = 0.05  # 50ms between requests
 
 
 class RouterOSClient:
@@ -63,7 +63,7 @@ class RouterOSClient:
         self._client: httpx.AsyncClient | None = None
 
         # Rate limiting.
-        self._semaphore = asyncio.Semaphore(1)
+        self._semaphore = asyncio.Semaphore(4)
         self._last_request_time: float = 0.0
 
         # Circuit breaker.
