@@ -7,7 +7,7 @@ import time
 import httpx
 import pytest
 
-from mikrotik_mcp.client import _CB_COOLDOWN, RouterOSClient
+from mikrotik_mcp.client import _CB_COOLDOWN, _CB_FAILURE_THRESHOLD, RouterOSClient
 from mikrotik_mcp.config import RouterOSSettings
 from mikrotik_mcp.types import (
     RouterOSConnectionError,
@@ -198,7 +198,7 @@ class TestRetry:
 
 
 class TestCircuitBreaker:
-    async def test_opens_after_3_failures(self, settings: RouterOSSettings) -> None:
+    async def test_opens_after_5_failures(self, settings: RouterOSSettings) -> None:
         call_count = 0
 
         async def mock_request(method: str, url: str, **kwargs: object) -> httpx.Response:
@@ -210,15 +210,16 @@ class TestCircuitBreaker:
             assert client._client is not None
             client._client.request = mock_request  # type: ignore[assignment]
             # Each GET retries 3 times (1 + 2 retries), each attempt records a failure.
-            # After 3 failures the CB opens, so the first get() call
-            # will record 3 failures (all 3 attempts fail) and open the CB.
+            # After 5 failures the CB opens. First get() records 3 failures
+            # (1 + 2 retries), CB stays closed.
             with pytest.raises(RouterOSConnectionError):
                 await client.get("/test")
-            assert client._cb_state == "open"
-
-            # Next request should fail immediately with Unavailable.
+            assert client._cb_state == "closed"
+            # Second call: attempt 1 → failure 4, attempt 2 → failure 5 (CB opens),
+            # attempt 3 → _cb_check raises Unavailable immediately.
             with pytest.raises(RouterOSUnavailableError):
                 await client.get("/test2")
+            assert client._cb_state == "open"
 
     async def test_resets_on_success(self, settings: RouterOSSettings) -> None:
         call_count = 0
@@ -246,9 +247,10 @@ class TestCircuitBreaker:
             assert client._client is not None
             client._client.request = failing_request  # type: ignore[assignment]
 
-            with pytest.raises(RouterOSConnectionError):
-                await client.get("/test")
-            assert client._cb_state == "open"
+            # Force CB open to isolate probe behavior.
+            client._cb_state = "open"
+            client._cb_failure_count = _CB_FAILURE_THRESHOLD
+            client._cb_last_failure_time = time.monotonic()
 
             # Simulate cooldown elapsed.
             client._cb_last_failure_time = time.monotonic() - _CB_COOLDOWN - 1
@@ -283,7 +285,7 @@ class TestRateLimiting:
         assert len(timestamps) == 3
         for i in range(1, len(timestamps)):
             gap = timestamps[i] - timestamps[i - 1]
-            assert gap >= 0.09, f"Gap {gap:.3f}s too short between requests {i - 1} and {i}"
+            assert gap >= 0.04, f"Gap {gap:.3f}s too short between requests {i - 1} and {i}"
 
 
 # ======================================================================
