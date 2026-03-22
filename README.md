@@ -134,13 +134,29 @@ Plus one resource (`router://api-groups`) that provides an overview of all API g
 
 ---
 
+## Credential storage
+
+Passwords are stored in your OS keyring (GNOME Keyring, macOS Keychain, or Windows Credential Store) so they never need to live in plain text on disk.
+
+The install wizard stores passwords in the keyring automatically. Password resolution priority:
+
+1. **OS keyring** (most secure)
+2. `routers.json` file
+3. Environment variables
+
+If the keyring is unavailable, the server falls back to JSON/env vars silently.
+
+> **Tip:** You can remove passwords from `routers.json` entirely once they're in the keyring. The server will find them automatically.
+
+---
+
 ## Configuration reference
 
 | Variable | Default | Description |
 |---|---|---|
 | `ROUTEROS_URL` | *(required for single router)* | Router REST API base URL |
 | `ROUTEROS_USER` | `admin` | Username |
-| `ROUTEROS_PASSWORD` | *(empty)* | Password |
+| `ROUTEROS_PASSWORD` | *(empty)* | Password (prefer keyring instead) |
 | `ROUTEROS_VERIFY_SSL` | `true` | Set to `false` for HTTP or self-signed certs |
 | `ROUTEROS_CA_CERT` | *(none)* | Path to CA certificate for custom HTTPS |
 | `ROUTEROS_CONFIG` | *(none)* | Path to `routers.json` for multi-router setups |
