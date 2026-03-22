@@ -75,6 +75,29 @@ if [[ "$MODE_CHOICE" == "2" ]]; then
 
     ROUTERS_JSON="$(cd "$(dirname "$ROUTERS_JSON")" && pwd)/$(basename "$ROUTERS_JSON")"
 
+    # Store multi-router passwords in keyring
+    echo
+    info "Storing router passwords in OS keyring..."
+    KEYRING_OK=true
+    if uvx --from "git+https://github.com/serengon/mikrotik-mcp-server.git" python -c "
+import json, keyring, sys
+with open('$ROUTERS_JSON') as f:
+    data = json.load(f)
+routers = data.get('routers', data)
+for name, cfg in routers.items():
+    pw = cfg.get('password', '')
+    if pw:
+        keyring.set_password('mikrotik-mcp', name, pw)
+        print(f'  Stored password for: {name}')
+" 2>/dev/null; then
+        success "Passwords stored in OS keyring"
+        info "You can now remove 'password' fields from routers.json"
+    else
+        warn "Could not store passwords in keyring (no backend available?)"
+        warn "Passwords will be read from routers.json instead"
+        KEYRING_OK=false
+    fi
+
     echo
     info "Registering MCP server with Claude Code..."
     claude mcp add mikrotik \
@@ -166,18 +189,41 @@ else
     exit 1
 fi
 
-# ── Step 4: Register in Claude Code ────────────────────────────────────────
+# ── Step 4: Store password in keyring ──────────────────────────────────────
+echo
+info "Storing password in OS keyring..."
+KEYRING_OK=false
+if uvx --from "git+https://github.com/serengon/mikrotik-mcp-server.git" python -c "
+import keyring
+keyring.set_password('mikrotik-mcp', 'default', '''${ROUTER_PASS}''')
+" 2>/dev/null; then
+    success "Password stored in OS keyring (not saved to disk)"
+    KEYRING_OK=true
+else
+    warn "Could not store password in keyring (no backend available?)"
+    warn "Password will be passed as environment variable instead"
+fi
+
+# ── Step 5: Register in Claude Code ────────────────────────────────────────
 echo
 info "Registering MCP server with Claude Code..."
 
-claude mcp add mikrotik \
-    -e "ROUTEROS_URL=${ROUTER_URL}" \
-    -e "ROUTEROS_USER=${ROUTER_USER}" \
-    -e "ROUTEROS_PASSWORD=${ROUTER_PASS}" \
-    -e "ROUTEROS_VERIFY_SSL=${VERIFY_SSL}" \
-    -- uvx --from "git+https://github.com/serengon/mikrotik-mcp-server.git" mikrotik-mcp
+if [[ "$KEYRING_OK" == "true" ]]; then
+    claude mcp add mikrotik \
+        -e "ROUTEROS_URL=${ROUTER_URL}" \
+        -e "ROUTEROS_USER=${ROUTER_USER}" \
+        -e "ROUTEROS_VERIFY_SSL=${VERIFY_SSL}" \
+        -- uvx --from "git+https://github.com/serengon/mikrotik-mcp-server.git" mikrotik-mcp
+else
+    claude mcp add mikrotik \
+        -e "ROUTEROS_URL=${ROUTER_URL}" \
+        -e "ROUTEROS_USER=${ROUTER_USER}" \
+        -e "ROUTEROS_PASSWORD=${ROUTER_PASS}" \
+        -e "ROUTEROS_VERIFY_SSL=${VERIFY_SSL}" \
+        -- uvx --from "git+https://github.com/serengon/mikrotik-mcp-server.git" mikrotik-mcp
+fi
 
-# ── Step 5: Success ────────────────────────────────────────────────────────
+# ── Step 6: Success ────────────────────────────────────────────────────────
 echo
 echo -e "${GREEN}────────────────────────────────────────${NC}"
 success "MikroTik MCP server installed!"

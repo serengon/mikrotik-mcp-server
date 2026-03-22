@@ -12,6 +12,8 @@ from pathlib import Path
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from mikrotik_mcp.keyring_store import get_password
+
 logger = logging.getLogger("mikrotik_mcp.config")
 
 
@@ -72,7 +74,18 @@ def load_router_configs() -> dict[str, RouterOSSettings]:
 
     # Fallback to single router from env vars
     logger.debug("No multi-router config found, using single-router env vars")
-    return {"default": get_settings()}
+    settings = get_settings()
+    if not settings.password.get_secret_value():
+        keyring_password = get_password("default")
+        if keyring_password:
+            settings = RouterOSSettings(
+                url=settings.url,
+                user=settings.user,
+                password=keyring_password,  # type: ignore[arg-type]
+                ca_cert=settings.ca_cert,
+                verify_ssl=settings.verify_ssl,
+            )
+    return {"default": settings}
 
 
 def _load_from_json(path: Path) -> dict[str, RouterOSSettings]:
@@ -87,10 +100,14 @@ def _load_from_json(path: Path) -> dict[str, RouterOSSettings]:
 
     configs: dict[str, RouterOSSettings] = {}
     for name, router_cfg in routers_data.items():
+        json_password = router_cfg.get("password", "")
+        keyring_password = get_password(name)
+        password = keyring_password or json_password or ""
+
         configs[name] = RouterOSSettings(
             url=router_cfg["url"],
             user=router_cfg.get("user", "admin"),
-            password=router_cfg.get("password", ""),  # type: ignore[arg-type]
+            password=password,  # type: ignore[arg-type]
             ca_cert=router_cfg.get("ca_cert"),
             verify_ssl=router_cfg.get("verify_ssl", True),
         )
