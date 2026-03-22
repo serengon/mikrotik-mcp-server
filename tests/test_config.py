@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -122,6 +123,56 @@ class TestLoadRouterConfigs:
 
         with pytest.raises(ValueError, match="Invalid routers config"):
             load_router_configs()
+
+    def test_keyring_overrides_json_password(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Keyring password takes priority over JSON password."""
+        config_file = tmp_path / "routers.json"
+        config_file.write_text(json.dumps({
+            "routers": {
+                "edge-gw": {"url": "http://172.16.0.1", "user": "admin", "password": "json-pass"},
+            }
+        }))
+        monkeypatch.setenv("ROUTEROS_CONFIG", str(config_file))
+
+        with patch("mikrotik_mcp.config.get_password", return_value="keyring-pass"):
+            configs = load_router_configs()
+
+        assert configs["edge-gw"].password.get_secret_value() == "keyring-pass"
+
+    def test_fallback_to_json_when_keyring_empty(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Falls back to JSON password when keyring has no entry."""
+        config_file = tmp_path / "routers.json"
+        config_file.write_text(json.dumps({
+            "routers": {
+                "edge-gw": {"url": "http://172.16.0.1", "user": "admin", "password": "json-pass"},
+            }
+        }))
+        monkeypatch.setenv("ROUTEROS_CONFIG", str(config_file))
+
+        with patch("mikrotik_mcp.config.get_password", return_value=None):
+            configs = load_router_configs()
+
+        assert configs["edge-gw"].password.get_secret_value() == "json-pass"
+
+    def test_single_router_keyring_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Single-router mode uses keyring when env var password is empty."""
+        monkeypatch.delenv("ROUTEROS_CONFIG", raising=False)
+        monkeypatch.setenv("ROUTEROS_URL", "http://single.test")
+        monkeypatch.setenv("ROUTEROS_USER", "admin")
+        monkeypatch.setenv("ROUTEROS_PASSWORD", "")
+        monkeypatch.chdir("/tmp")
+
+        from mikrotik_mcp.config import get_settings
+        get_settings.cache_clear()
+
+        with patch("mikrotik_mcp.config.get_password", return_value="keyring-default"):
+            configs = load_router_configs()
+
+        assert configs["default"].password.get_secret_value() == "keyring-default"
 
     def test_json_defaults(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
         """User and password default correctly when not specified."""

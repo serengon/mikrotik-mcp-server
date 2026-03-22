@@ -40,3 +40,4 @@ Thumbs.db
 
 # Multi-router config (contains credentials)
 routers.json
+.mcp.json
