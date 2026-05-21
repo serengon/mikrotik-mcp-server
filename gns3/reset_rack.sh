@@ -8,9 +8,9 @@ set -euo pipefail
 
 SSH="ssh andres@10.0.0.20"
 GNS3_URL="http://localhost:3080"
-PROJECT_ID="19cbfa0c-b4d8-449c-a387-1e23dfec3fce"
-SNAPSHOT_ID="a0608b52-f571-4a75-8ae8-a131037d1a69"
-CLOUD_NODE_ID="c054837c-9c8e-4b02-8404-bdabe0d939e6"
+PROJECT_ID="0e96f5f3-b28f-4ea6-a72c-84a558aa5ef5"
+SNAPSHOT_ID="043fe6a7-9538-4612-85da-637623edde7c"
+CLOUD_NODE_ID="359a8257-1489-45da-a51a-e1f69ddd903e"
 MGMT_IFACE="enxd8bbc11e0730"
 
 echo "=== Resetting rack to baseline snapshot ==="
@@ -47,12 +47,14 @@ $SSH "curl -s -X POST $GNS3_URL/v2/projects/$PROJECT_ID/nodes/$CLOUD_NODE_ID/sto
 sleep 2
 echo "Bridge: OK"
 
-# 7. Re-apply iptables forwarding rules
+# 7. Re-apply iptables forwarding + masquerade rules
 $SSH "
 sudo iptables -D FORWARD -i gns3-mgmt -o $MGMT_IFACE -j ACCEPT 2>/dev/null || true
 sudo iptables -D FORWARD -i $MGMT_IFACE -o gns3-mgmt -j ACCEPT 2>/dev/null || true
 sudo iptables -I FORWARD 1 -i gns3-mgmt -o $MGMT_IFACE -j ACCEPT
 sudo iptables -I FORWARD 1 -i $MGMT_IFACE -o gns3-mgmt -j ACCEPT
+sudo iptables -t nat -C POSTROUTING -s 10.0.0.0/24 -o gns3-mgmt -j MASQUERADE 2>/dev/null || \
+sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o gns3-mgmt -j MASQUERADE
 "
 echo "iptables: OK"
 
@@ -69,7 +71,7 @@ echo "Waiting for routers to boot..."
 sleep 15
 ALL_OK=true
 for ip in 172.16.0.1 172.16.0.2 172.16.0.3 172.16.0.4; do
-  RESULT=$(curl -sf --connect-timeout 3 -u admin: "http://$ip/rest/system/identity" 2>&1 || echo "FAIL")
+  RESULT=$(curl -sf --connect-timeout 3 -u admin:Mcp2026x "http://$ip/rest/system/identity" 2>&1 || echo "FAIL")
   echo "  $ip: $RESULT"
   [[ "$RESULT" == "FAIL" ]] && ALL_OK=false
 done
